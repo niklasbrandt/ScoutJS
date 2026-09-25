@@ -1,0 +1,40 @@
+{
+  "name": "scoutjs",
+  "version": "1.0.0",
+  "description": "A modular pipeline and human-in-the-loop review dashboard for crawling, aggregating, and acting on structured data.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/niklasbrandt/ScoutJS.git"
+  },
+  "keywords": [
+    "scraper",
+    "crawler",
+    "dashboard",
+    "human-in-the-loop",
+    "triage",
+    "pipeline",
+    "workflow-automation",
+    "data-aggregation"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2"
+  }
+}

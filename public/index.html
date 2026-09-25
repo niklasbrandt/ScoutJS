@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ScoutJS Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --app-bg: #3e4553;
+      --card-bg: #262c37;
+      --card-inner: #1b2029;
+      --border-color: #566276;
+    }
+    body {
+      background-color: #3e4553;
+      color: #f8fafc;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 7px;
+      height: 7px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #1b2029;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #566276;
+      border-radius: 4px;
+    }
+    .card-shadow {
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+    }
+  </style>
+</head>
+<body class="min-h-screen font-sans antialiased text-slate-100">
+
+  <!-- Top Navigation -->
+  <header class="sticky top-0 z-40 bg-[#2b313d]/95 backdrop-blur-md border-b border-[#566276] px-6 py-4 card-shadow">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div class="flex items-center gap-3.5">
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-black text-xl text-white tracking-tight" id="app-title">ScoutJS</h1>
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-semibold border border-emerald-400/40">Generic</span>
+          </div>
+          <p class="text-xs text-slate-300 mt-0.5 font-medium" id="app-subtitle">Configured via config.json</p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-3">
+        <button onclick="triggerScrape()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/40 transition-all active:scale-95">
+          <i class="fa-solid fa-radar text-indigo-200"></i>
+          <span>Run Scrapers</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Filter & Search Bar -->
+  <div class="max-w-7xl mx-auto px-6 pt-6">
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-[#262c37] border border-[#566276] p-4 rounded-2xl card-shadow">
+      <!-- Status Tabs -->
+      <div class="flex flex-wrap items-center gap-2">
+        <button onclick="setFilter('pending')" id="tab-pending" class="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-md flex items-center gap-2 transition-all">
+          <span>Pending</span>
+          <span id="count-pending" class="px-2 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-mono">0</span>
+        </button>
+        <button onclick="setFilter('accepted')" id="tab-accepted" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-200 hover:text-white hover:bg-[#1b2029] flex items-center gap-2 transition-all">
+          <span>Accepted</span>
+          <span id="count-accepted" class="px-2 py-0.5 rounded-full bg-[#1b2029] text-emerald-300 text-[11px] font-mono border border-[#566276]">0</span>
+        </button>
+        <button onclick="setFilter('rejected')" id="tab-rejected" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-200 hover:text-white hover:bg-[#1b2029] flex items-center gap-2 transition-all">
+          <span>Rejected</span>
+          <span id="count-rejected" class="px-2 py-0.5 rounded-full bg-[#1b2029] text-rose-300 text-[11px] font-mono border border-[#566276]">0</span>
+        </button>
+      
+      <!-- Collapse Toggle -->
+      <div class="flex items-center gap-3 ml-auto">
+        <button onclick="toggleCollapse()" id="collapse-btn" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition border border-slate-700">
+          <i class="fa-solid fa-compress text-slate-400" id="collapse-icon"></i> <span id="collapse-text">Collapse Results</span>
+        </button>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Items Matrix -->
+  <main class="max-w-7xl mx-auto px-6 py-6 space-y-6">
+    <div id="items-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <!-- Injected dynamically -->
+    </div>
+  </main>
+
+  <script src="/plugin.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

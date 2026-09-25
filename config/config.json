@@ -1,0 +1,13 @@
+{
+  "global": {
+    "theme": "dark",
+    "name": "ScoutJS"
+  },
+  "scraper": {
+    "keywords": ["generic include"],
+    "exclude": ["generic exclude"]
+  },
+  "persona": {
+    "name": "Default User"
+  }
+}
