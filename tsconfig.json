@@ -12,6 +12,7 @@
   },
   "include": [
     "server.js",
+    "lib/**/*.js",
     "plugins/**/*.js",
     "types.d.ts"
   ],

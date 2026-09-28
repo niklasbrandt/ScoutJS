@@ -28,8 +28,10 @@ server.js                   --> Deduplicates by item.id, prepends to data/databa
 - All domain-specific data, fields, filters, and logic belong exclusively in:
   - `plugins/scrapers/*.js` (data collection)
   - `plugins/actions/*.js` (downstream automations)
+  - `plugins/store/*.js` (at most one file — a host app's own `ScoutStore`, see §7)
+  - `plugins/auth/*.js` (at most one file — an `AuthHook`, see §7)
   - `config/config.json` (runtime settings and credentials)
-  - `public/plugin.js` (custom UI cards and filters)
+  - `public/plugin.js` (custom UI cards, detail panels and filters)
 
 ---
 
@@ -44,12 +46,17 @@ interface Item {
   description?: string;// Optional. Summary text or body content
   metadata?: Record<string, any>; // Optional. Domain attributes (price, tags, author, etc.)
   url?: string;        // Optional. External link to source record
-  status?: string;     // Assigned by server: "pending" | "accepted" | "rejected"
+  rank?: number;       // Optional. Queue sort key for `sort=rank`
+  status?: string;     // Deprecated: only read as the item's *initial* decision on a target
 }
 ```
 
 Notes:
-- The server deduplicates across `pending`, `accepted`, and `rejected` lists by checking if `id` already exists.
+- The store deduplicates items by `id` across the whole store, independent of target.
+- An item's actual lifecycle state is a `Decision` (`{itemId, targetId, status, note?, ...}`),
+  **per target** — the same item can be `accepted` on one target and `pending` on another. See
+  §7. `Item.status` is only consulted once, as the initial decision when a scraper's items are
+  first inserted into a target.
 - Put any domain-specific attributes inside `metadata` (e.g., `metadata.price`, `metadata.score`).
 
 ---
@@ -63,6 +70,9 @@ Requirements:
 - Receives the parsed `config/config.json` object.
 - Returns an array of items conforming to the `Item` schema.
 - Must catch and handle its own network or parsing errors gracefully.
+- May also `export const targets = ['some-target-id'];` to say which target(s) its items
+  belong to (e.g. `products@domain-a`). Omit it and items land in the implicit `default`
+  target, unchanged from before Targets existed.
 
 Example template:
 ```javascript
@@ -182,12 +192,27 @@ All settings belong in `config/config.json`:
 
 ---
 
-## 7. Storage Engine
+## 7. Storage Engine, Targets, Decisions
 
-- Data is persisted in `data/database.json`.
-- Three lists: `{ pending: [], accepted: [], rejected: [] }`.
-- Auto-initialized on startup if missing.
-- `data/database.json` is gitignored so user data is never committed.
+- Persistence goes through the `ScoutStore` interface (`types.d.ts`):
+  `listTargets, listItems, getItem, upsertItems, decide, decideBatch`.
+- **`JsonStore`** (default): `data/database.json`, shape `{ items, decisions, targets }`.
+  Auto-initialized on startup if missing. A pre-Targets file (`{pending, accepted, rejected}`)
+  is migrated automatically on first read, with the original backed up to
+  `data/database.pre-targets-backup.json` first. `data/database.json` is gitignored so user
+  data is never committed.
+- **`SqliteStore`**: `data/database.sqlite`. Enable with `"global": {"store": "sqlite"}` in
+  `config/config.json`.
+- **A host application can inject its own store**: put exactly one file in `plugins/store/`,
+  default-exporting a `(config) => ScoutStore` factory. This is the intended way for a host app
+  to back triage decisions directly with its own database — no sync between two databases.
+- **Targets**: a named queue (`{id, label, group?}`). Items without an explicit target live in
+  the implicit `default` target.
+- **Decisions**: `{itemId, targetId, status, decidedAt?, decidedBy?, note?}` — the actual
+  lifecycle state, per (item, target) pair. The same item can be `accepted` on one target and
+  `pending` on another.
+- **Auth**: put exactly one file in `plugins/auth/`, default-exporting an `AuthHook`:
+  `(req) => boolean | Promise<boolean>`. No file means no auth (unchanged default).
 
 ---
 
@@ -212,10 +237,26 @@ PORT=3001 npm start
 # Trigger scrape programmatically
 curl -s -X POST http://localhost:3000/api/scrape
 
-# Change item status
+# Change item status (legacy alias, acts on the `default` target)
 curl -s -X POST http://localhost:3000/api/items/<id>/status \
   -H "Content-Type: application/json" \
   -d '{"status":"accepted"}'
+
+# List targets
+curl -s http://localhost:3000/api/targets
+
+# List items on a target, paginated/sorted
+curl -s "http://localhost:3000/api/items?target=products@domain-a&status=pending&sort=rank&limit=20"
+
+# Record a decision on a specific target
+curl -s -X POST http://localhost:3000/api/decisions \
+  -H "Content-Type: application/json" \
+  -d '{"itemId":"<id>","targetId":"products@domain-a","status":"accepted"}'
+
+# Record several decisions at once
+curl -s -X POST http://localhost:3000/api/decisions/batch \
+  -H "Content-Type: application/json" \
+  -d '{"decisions":[{"itemId":"<id>","targetId":"products@domain-a","status":"accepted"}]}'
 
 # Execute action
 curl -s -X POST http://localhost:3000/api/action/generate_message \

@@ -47,6 +47,14 @@
     .card-shadow {
       box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
     }
+    .item-card.is-focused {
+      outline: 2px solid #6366f1;
+      outline-offset: 2px;
+    }
+    .item-card.is-selected {
+      border-color: #6366f1 !important;
+      background-color: rgba(99, 102, 241, 0.08);
+    }
   </style>
 </head>
 <body class="min-h-screen font-sans antialiased text-slate-100">
@@ -66,6 +74,7 @@
 
       <!-- Action Buttons -->
       <div class="flex items-center gap-3">
+        <select id="target-switcher" class="px-3 py-2.5 rounded-xl bg-[#1b2029] border border-[#566276] text-slate-100 text-xs font-bold"></select>
         <button onclick="triggerScrape()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/40 transition-all active:scale-95">
           <i class="fa-solid fa-radar text-indigo-200"></i>
           <span>Run Scrapers</span>
@@ -91,23 +100,62 @@
           <span>Rejected</span>
           <span id="count-rejected" class="px-2 py-0.5 rounded-full bg-[#1b2029] text-rose-300 text-[11px] font-mono border border-[#566276]">0</span>
         </button>
-      
+
+        <select id="sort-switcher" class="ml-1 px-3 py-2 rounded-xl bg-[#1b2029] border border-[#566276] text-slate-200 text-xs font-bold">
+          <option value="recent">Sort: Recent</option>
+          <option value="rank">Sort: Rank</option>
+        </select>
+      </div>
+
       <!-- Collapse Toggle -->
       <div class="flex items-center gap-3 ml-auto">
         <button onclick="toggleCollapse()" id="collapse-btn" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition border border-slate-700">
           <i class="fa-solid fa-compress text-slate-400" id="collapse-icon"></i> <span id="collapse-text">Collapse Results</span>
         </button>
       </div>
-      </div>
     </div>
+
+    <!-- Bulk action toolbar -->
+    <div id="bulk-toolbar" class="hidden mt-3 flex flex-wrap items-center gap-3 bg-[#1b2029] border border-indigo-500/40 p-3 rounded-2xl">
+      <span id="bulk-count" class="text-xs font-bold text-indigo-300">0 selected</span>
+      <button onclick="bulkDecide('accepted')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">Accept selected</button>
+      <button onclick="bulkDecide('rejected')" class="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-600 text-white text-xs font-bold">Reject selected</button>
+      <button onclick="clearSelection()" class="px-3 py-1.5 rounded-lg bg-[#262c37] border border-[#566276] text-slate-300 text-xs font-bold">Clear</button>
+      <span class="mx-2 text-slate-500">|</span>
+      <label class="text-xs text-slate-300 font-medium">Approve all visible with rank ≥</label>
+      <input id="rank-threshold" type="number" step="any" class="w-20 px-2 py-1.5 rounded-lg bg-[#262c37] border border-[#566276] text-slate-100 text-xs">
+      <button onclick="approveVisibleAboveRank()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">Approve</button>
+    </div>
+
+    <p class="mt-2 text-[11px] text-slate-400">
+      Keyboard: <kbd class="px-1 py-0.5 bg-[#1b2029] border border-[#566276] rounded">j</kbd>/<kbd class="px-1 py-0.5 bg-[#1b2029] border border-[#566276] rounded">k</kbd> move ·
+      <kbd class="px-1 py-0.5 bg-[#1b2029] border border-[#566276] rounded">a</kbd> accept ·
+      <kbd class="px-1 py-0.5 bg-[#1b2029] border border-[#566276] rounded">r</kbd> reject ·
+      <kbd class="px-1 py-0.5 bg-[#1b2029] border border-[#566276] rounded">u</kbd> undo ·
+      <kbd class="px-1 py-0.5 bg-[#1b2029] border border-[#566276] rounded">x</kbd> select · shift-click for range select
+    </p>
   </div>
 
-  <!-- Items Matrix -->
-  <main class="max-w-7xl mx-auto px-6 py-6 space-y-6">
-    <div id="items-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <!-- Injected dynamically -->
+  <!-- Items Matrix + Detail Panel -->
+  <main class="max-w-7xl mx-auto px-6 py-6 flex flex-col lg:flex-row gap-6">
+    <div class="flex-1 space-y-6 min-w-0">
+      <div id="items-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Injected dynamically -->
+      </div>
+      <div class="flex justify-center">
+        <button id="load-more-btn" onclick="loadMore()" class="hidden px-4 py-2 rounded-xl bg-[#262c37] border border-[#566276] text-slate-200 text-xs font-bold hover:bg-[#1b2029]">
+          Load more
+        </button>
+      </div>
     </div>
+    <aside id="detail-panel" class="hidden lg:w-96 shrink-0 bg-[#262c37] border border-[#566276] rounded-2xl p-5 card-shadow self-start sticky top-28"></aside>
   </main>
+
+  <!-- Undo toast -->
+  <div id="undo-toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#1b2029] border border-[#566276] rounded-xl px-4 py-3 flex items-center gap-4 card-shadow">
+    <span id="undo-message" class="text-xs text-slate-200 font-medium"></span>
+    <button onclick="undo()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">Undo</button>
+  </div>
 
   <script src="/plugin.js"></script>
   <script src="/app.js"></script>

@@ -39,23 +39,23 @@ ScoutJS provides an engine for monitoring data sources, collecting incoming item
 |                                 (server.js)                                 |
 |                                                                             |
 |      +---------------------------------------------------------------+      |
-|      |    Deduplication & State Management                           |      |
+|      |    Deduplication  ·  Auth Hook (plugins/auth/)                |      |
 |      +---------------------------------------------------------------+      |
 |                                       |                                     |
 |                                       v                                     |
 |                 +-------------------------------------------+               |
-|                 |          DATA STORE (JSON Database)       |               |
-|                 |             data/database.json            |               |
+|                 |   SCOUTSTORE — Targets x Decisions        |               |
+|                 |   JsonStore (default) / SqliteStore /     |               |
+|                 |   host app's own store (plugins/store/)   |               |
 |                 |                                           |               |
-|                 |  +-------------+  +------------+  +----+  |               |
-|                 |  |   Pending   |  |  Accepted  |  |Rej.|  |               |
-|                 |  +-------------+  +------------+  +----+  |               |
+|                 |  Item[]  x  Decision{itemId, targetId,    |               |
+|                 |             status, note, decidedAt}      |               |
 |                 +-------------------------------------------+               |
 |                        ^                                 |                  |
 +------------------------|---------------------------------|------------------+
                          |                                 |
-         GET /api/items  |                                 | Trigger Action
-   POST /api/items/:id/status                              | POST /api/action/:name
+ GET /api/items?target=&status=&sort=&cursor=              | Trigger Action
+ POST /api/decisions[/batch]  ·  GET /api/targets           | POST /api/action/:name
                          v                                 v
 +------------------------------------+   +------------------------------------+
 |         WEB DASHBOARD UI           |   |        ACTION PLUGINS LAYER        |
@@ -84,11 +84,13 @@ ScoutJS provides an engine for monitoring data sources, collecting incoming item
 
 - Modular Scraper Plugins: Drop self-contained fetchers into `plugins/scrapers/` to pull data from any API, database, or web page.
 - Pluggable Action System: Implement custom post-processing, templating, webhooks, or automation handlers in `plugins/actions/`.
-- Human-in-the-Loop Review: Clean, responsive web dashboard with tabs for `pending`, `accepted`, and `rejected` records.
-- Deduplication by Default: Incoming items are automatically deduplicated against existing database records using unique IDs.
+- Targets & Per-Target Decisions: the same item can be `accepted` on one queue and still `pending` on another (`products@domain-a` vs. `products@domain-b`) — see [Targets, Decisions and Stores](#targets-decisions-and-stores).
+- Human-in-the-Loop Review: a dashboard with `pending`/`accepted`/`rejected` tabs, a target switcher, rank or recency sorting, cursor pagination, multi-select with shift-click, "approve all visible ≥ rank X", keyboard shortcuts (`j`/`k`/`a`/`r`/`u`/`x`), a reject note, and an undo toast.
+- Pluggable Storage: `JsonStore` (default, auto-migrates a pre-Targets file) or `SqliteStore` ship in `lib/stores/`; a host application can inject its own `ScoutStore` via `plugins/store/` to back triage decisions directly with its own database.
+- Optional Auth Hook: `plugins/auth/` for a host application's own request gate — none by default.
+- Deduplication by Default: Incoming items are automatically deduplicated against existing store records using unique IDs.
 - Template Rendering Engine: Built-in placeholder substitution (`{{item.title}}`, `{{config.persona.name}}`) for message crafting and export.
-- UI Plugin Architecture: Inject custom card layouts and custom filters into the frontend via `public/plugin.js` without touching core code.
-- File-Based Storage: Zero-dependency JSON flat-file storage with automatic directory and file initialization on startup.
+- UI Plugin Architecture: Inject custom card layouts, a side-panel detail view, and custom filters into the frontend via `public/plugin.js` without touching core code.
 - Zero-Build Type Safety: Built-in TypeScript declarations (`types.d.ts`), `checkJs` validation, and `npm run typecheck` script providing complete IntelliSense and autocomplete without requiring transpilation or build pipelines.
 - Modern ECMAScript Stack: Built using Node.js ES Modules, Express, Tailwind CSS, and vanilla JavaScript.
 
@@ -102,15 +104,22 @@ scoutjs/
 |   `-- workflows/
 |       `-- ci.yml                 # Automated CI workflow (typecheck + syntax validation)
 |-- config/
-|   `-- config.json                # Global settings, scraper keywords, persona config
+|   `-- config.json                # Global settings, scraper keywords, persona, store kind
 |-- data/
 |   |-- .gitkeep                   # Data directory placeholder
-|   `-- database.json              # Local item storage (pending, accepted, rejected)
+|   |-- database.json              # JsonStore: { items, decisions, targets } (gitignored)
+|   `-- database.sqlite            # SqliteStore, if config.global.store = "sqlite" (gitignored)
+|-- lib/
+|   `-- stores/
+|       |-- json-store.js          # Default ScoutStore impl (auto-migrates a pre-Targets file)
+|       `-- sqlite-store.js        # SQLite-backed ScoutStore impl
 |-- plugins/
 |   |-- actions/
 |   |   `-- generate_message.js    # Sample action plugin with template interpolation
-|   `-- scrapers/
-|       `-- mock_scraper.js        # Sample scraper plugin returning normalized items
+|   |-- auth/                      # At most one file: an AuthHook (req) => boolean — none by default
+|   |-- scrapers/
+|   |   `-- mock_scraper.js        # Sample scraper plugin returning normalized items
+|   `-- store/                     # At most one file: a host app's own ScoutStore factory
 |-- public/
 |   |-- app.js                     # Frontend dashboard logic and API client
 |   |-- index.html                 # Dashboard markup (Tailwind CSS)
@@ -180,6 +189,8 @@ Edit `config/config.json` to suit your requirements:
 }
 ```
 
+Add `"global": {"store": "sqlite"}` to use `SqliteStore` instead of the default `JsonStore` — see [Targets, Decisions and Stores](#targets-decisions-and-stores).
+
 ### 4. Start the server
 
 ```bash
@@ -229,7 +240,41 @@ Field descriptions:
 - `description` (string, optional): Text summary or body content.
 - `metadata` (object, optional): Freeform key-value pairs specific to your domain. Displayed in the item card and accessible to action templates.
 - `url` (string, optional): External link to the original resource.
-- `status` (string): Lifecycle state (`pending`, `accepted`, or `rejected`). Assigned by the server upon ingestion.
+- `status` (string, deprecated): Only used as the item's *initial* decision when a scraper first inserts it into a target. The source of truth for an item's current lifecycle state is now its `Decision` on each `Target` — see the next section.
+- `rank` (number, optional): Queue sort key for `sort=rank`.
+
+---
+
+## Targets, Decisions and Stores
+
+A single item can be **accepted on one target and still pending on another** — e.g. a product
+that's a fit for `products@domain-a` but hasn't been reviewed for `products@domain-b` yet.
+This replaces the original single-status-per-item model.
+
+- **Target**: a named queue (`{ id, label, group? }`). Items that don't specify one live in the
+  implicit `default` target, so a pre-Targets scraper/UI needs zero changes.
+- **Decision**: `{ itemId, targetId, status, decidedAt?, decidedBy?, note? }` — the actual
+  lifecycle state, now separate from the item record itself.
+- **Store**: the persistence layer is pluggable via the `ScoutStore` interface
+  (`listTargets`, `listItems`, `getItem`, `upsertItems`, `decide`, `decideBatch` — see
+  `types.d.ts`). Two implementations ship in `lib/stores/`:
+  - `JsonStore` (default) — the original `data/database.json`, extended to hold
+    `{ items, decisions, targets }`. A pre-Targets file (`{pending, accepted, rejected}`) is
+    **migrated automatically** on first read; the original is backed up next to it as
+    `database.pre-targets-backup.json` first.
+  - `SqliteStore` — set `"global": { "store": "sqlite" }` in `config/config.json` to use it
+    instead (`data/database.sqlite`).
+- **Injecting your own store**: put a single file in `plugins/store/`, default-exporting a
+  `(config) => ScoutStore` factory (a `StoreFactory`, see `types.d.ts`). This is how a host
+  application backs triage decisions directly by its own database instead of ScoutJS's file —
+  no sync between two databases.
+- **Auth**: ScoutJS itself still has no auth. Put a single file in `plugins/auth/`,
+  default-exporting an `AuthHook`: `(req) => boolean | Promise<boolean>`. Returning `false`
+  (or throwing) responds `401` before any route runs. No file present means no auth, unchanged
+  from before.
+- **A scraper can declare its target(s)** by exporting `targets: string[]` alongside its
+  default export — e.g. `export const targets = ['products@domain-a'];`. Omitting it keeps
+  landing items in `default`, unchanged from before Targets existed.
 
 ---
 
@@ -321,9 +366,16 @@ You can customize card rendering and add filter controls without modifying core 
 
 /** @type {import('../types.d.ts').ScoutUIPlugin} */
 window.ScoutUIPlugin = {
-  // Render custom card HTML for an item
+  // Render custom card HTML for an item (item is a TargetedItem: the Item plus its
+  // status/decidedAt/note/targetId on the currently viewed target)
   renderCard(item, currentFilter) {
     // Return an HTML string to override default card, or return null for default card
+    return null;
+  },
+
+  // Render a side-panel detail view when an item card is clicked (not on a button/link/
+  // checkbox). Return null for no detail view.
+  renderDetail(item, targetId) {
     return null;
   },
 
@@ -368,10 +420,13 @@ This repository is optimized for AI-assisted development (Claude, Cursor, Copilo
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/items` | Returns database object containing `pending`, `accepted`, and `rejected` item arrays. |
-| `POST` | `/api/items/:id/status` | Moves item to a new status. Body: `{"status": "accepted" \| "rejected" \| "pending"}`. |
+| `GET` | `/api/items` | With **no** query params: the original `{pending, accepted, rejected}` shape, scoped to the `default` target (unchanged behavior). With any of `target`/`status`/`sort`/`limit`/`cursor`: `{ items, nextCursor?, total }`, scoped to `target` (default `default`), optionally filtered by `status`, sorted by `sort=rank\|recent`, paginated by `limit`/`cursor`. |
+| `GET` | `/api/targets` | Lists all known `Target`s. |
+| `POST` | `/api/items/:id/status` | **Legacy alias**, acts on the `default` target. Body: `{"status": "accepted" \| "rejected" \| "pending"}`. |
+| `POST` | `/api/decisions` | Records one decision. Body: `{"itemId", "targetId", "status", "note"?, "decidedBy"?}`. |
+| `POST` | `/api/decisions/batch` | Records several decisions at once. Body: `{"decisions": [...]}` (same shape as above, each entry). |
 | `GET` | `/api/config` | Retrieves the parsed configuration from `config/config.json`. |
-| `POST` | `/api/scrape` | Executes all scraper plugins in `plugins/scrapers/`, deduplicates items, and inserts new items. |
+| `POST` | `/api/scrape` | Executes all scraper plugins in `plugins/scrapers/`, deduplicates items, and inserts new items into each scraper's declared target(s) (`default` if none declared). |
 | `POST` | `/api/action/:actionName` | Executes the specified action plugin in `plugins/actions/:actionName.js`. Body: `{"itemId": "..."}`. |
 
 ---
