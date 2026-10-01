@@ -86,6 +86,10 @@ function updateBulkToolbarForFilter() {
 
 function setFilter(filter) {
   currentFilter = filter;
+  // Clear first, synchronously, so the toolbar (and any selection from the previous tab) is
+  // gone at the exact moment the tab switches — otherwise it lingers, showing the old tab's
+  // selected items with the new tab's button set, until the async refetch below catches up.
+  clearSelection();
   updateBulkToolbarForFilter();
   resetAndLoad();
 }
