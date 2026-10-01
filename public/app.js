@@ -73,8 +73,20 @@ function loadMore() {
   loadItems({ append: true });
 }
 
+/** Scopes the bulk toolbar to the same transitions the single-item card already offers for
+ *  this tab (see defaultCardHtml) — accepting an already-accepted item, or rejecting an
+ *  already-rejected one, is a no-op nobody should be offered in the first place. */
+function updateBulkToolbarForFilter() {
+  const show = (id, visible) => document.getElementById(id).classList.toggle('hidden', !visible);
+  show('bulk-accept-btn', currentFilter === 'pending');
+  show('bulk-reject-btn', currentFilter === 'pending' || currentFilter === 'accepted');
+  show('bulk-restore-btn', currentFilter === 'rejected');
+  show('bulk-rank-group', currentFilter === 'pending');
+}
+
 function setFilter(filter) {
   currentFilter = filter;
+  updateBulkToolbarForFilter();
   resetAndLoad();
 }
 
@@ -122,7 +134,8 @@ async function bulkDecide(status) {
   await fetch(`${API_BASE}api/decisions/batch`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decisions }),
   });
-  showUndoToast(`${status === 'accepted' ? 'Accepted' : 'Rejected'} ${targets.length} item(s)`, previous);
+  const verb = status === 'accepted' ? 'Accepted' : status === 'rejected' ? 'Rejected' : 'Restored';
+  showUndoToast(`${verb} ${targets.length} item(s)`, previous);
   clearSelection();
   resetAndLoad();
 }
@@ -437,6 +450,7 @@ async function init() {
     currentSort = e.target.value;
     resetAndLoad();
   };
+  updateBulkToolbarForFilter(); // currentFilter defaults to 'pending' before any tab switch
   resetAndLoad();
 }
 

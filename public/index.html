@@ -115,16 +115,21 @@
       </div>
     </div>
 
-    <!-- Bulk action toolbar -->
+    <!-- Bulk action toolbar. Buttons are scoped per tab to the same transitions the
+         single-item card already offers there (see defaultCardHtml) — e.g. "accept" is never
+         offered on the accepted tab, since the items it'd act on are already accepted. -->
     <div id="bulk-toolbar" class="hidden mt-3 flex flex-wrap items-center gap-3 bg-[#1b2029] border border-indigo-500/40 p-3 rounded-2xl">
       <span id="bulk-count" class="text-xs font-bold text-indigo-300">0 selected</span>
-      <button onclick="bulkDecide('accepted')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">Accept selected</button>
-      <button onclick="bulkDecide('rejected')" class="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-600 text-white text-xs font-bold">Reject selected</button>
+      <button id="bulk-accept-btn" onclick="bulkDecide('accepted')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">Accept selected</button>
+      <button id="bulk-reject-btn" onclick="bulkDecide('rejected')" class="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-600 text-white text-xs font-bold">Reject selected</button>
+      <button id="bulk-restore-btn" onclick="bulkDecide('pending')" class="px-3 py-1.5 rounded-lg bg-[#262c37] border border-[#566276] text-indigo-300 text-xs font-bold">Restore selected</button>
       <button onclick="clearSelection()" class="px-3 py-1.5 rounded-lg bg-[#262c37] border border-[#566276] text-slate-300 text-xs font-bold">Clear</button>
-      <span class="mx-2 text-slate-500">|</span>
-      <label class="text-xs text-slate-300 font-medium">Approve all visible with rank ≥</label>
-      <input id="rank-threshold" type="number" step="any" class="w-20 px-2 py-1.5 rounded-lg bg-[#262c37] border border-[#566276] text-slate-100 text-xs">
-      <button onclick="approveVisibleAboveRank()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">Approve</button>
+      <span id="bulk-rank-group" class="contents">
+        <span class="mx-2 text-slate-500">|</span>
+        <label class="text-xs text-slate-300 font-medium">Approve all visible with rank ≥</label>
+        <input id="rank-threshold" type="number" step="any" class="w-20 px-2 py-1.5 rounded-lg bg-[#262c37] border border-[#566276] text-slate-100 text-xs">
+        <button onclick="approveVisibleAboveRank()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">Approve</button>
+      </span>
     </div>
 
     <p class="mt-2 text-[11px] text-slate-400">
