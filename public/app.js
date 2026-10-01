@@ -1,3 +1,9 @@
+// Derived from the page's own URL, not hardcoded to "/" — a host serving this behind a
+// stripped path prefix (Traefik's stripprefix middleware, found live: every /api/... call
+// below 404'd, or worse, silently got an HTML error page back and threw on `.json()`) still
+// needs these requests to carry that prefix so the proxy can route them back here.
+const API_BASE = new URL('.', window.location.href).pathname;
+
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -25,7 +31,7 @@ let lastAction = null; // array of previous Decisions to restore on undo
 // --- Data loading ---
 
 async function loadTargets() {
-  const res = await fetch('/api/targets');
+  const res = await fetch(`${API_BASE}api/targets`);
   const targets = await res.json();
   const sel = document.getElementById('target-switcher');
   sel.innerHTML = targets.map((t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.label)}</option>`).join('');
@@ -36,7 +42,7 @@ async function loadTargets() {
 async function refreshCounts() {
   const [pending, accepted, rejected] = await Promise.all(
     ['pending', 'accepted', 'rejected'].map((status) =>
-      fetch(`/api/items?target=${encodeURIComponent(currentTarget)}&status=${status}&limit=1`).then((r) => r.json()),
+      fetch(`${API_BASE}api/items?target=${encodeURIComponent(currentTarget)}&status=${status}&limit=1`).then((r) => r.json()),
     ),
   );
   counts = { pending: pending.total, accepted: accepted.total, rejected: rejected.total };
@@ -46,7 +52,7 @@ async function refreshCounts() {
 async function loadItems({ append = false } = {}) {
   const params = new URLSearchParams({ target: currentTarget, status: currentFilter, sort: currentSort, limit: '30' });
   if (append && nextCursor) params.set('cursor', nextCursor);
-  const res = await fetch(`/api/items?${params}`);
+  const res = await fetch(`${API_BASE}api/items?${params}`);
   const data = await res.json();
   items = append ? items.concat(data.items) : data.items;
   nextCursor = data.nextCursor;
@@ -86,7 +92,7 @@ async function decide(item, status) {
     if (note === null) return; // cancelled
   }
   const previous = [{ itemId: item.id, targetId: currentTarget, status: item.status, note: item.note, decidedAt: item.decidedAt }];
-  await fetch('/api/decisions', {
+  await fetch(`${API_BASE}api/decisions`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ itemId: item.id, targetId: currentTarget, status, note: note || undefined }),
   });
@@ -113,7 +119,7 @@ async function bulkDecide(status) {
   }
   const previous = targets.map((i) => ({ itemId: i.id, targetId: currentTarget, status: i.status, note: i.note, decidedAt: i.decidedAt }));
   const decisions = targets.map((i) => ({ itemId: i.id, targetId: currentTarget, status, note: note || undefined }));
-  await fetch('/api/decisions/batch', {
+  await fetch(`${API_BASE}api/decisions/batch`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decisions }),
   });
   showUndoToast(`${status === 'accepted' ? 'Accepted' : 'Rejected'} ${targets.length} item(s)`, previous);
@@ -148,7 +154,7 @@ async function undo() {
   const decisions = lastAction;
   lastAction = null;
   document.getElementById('undo-toast').classList.add('hidden');
-  await fetch('/api/decisions/batch', {
+  await fetch(`${API_BASE}api/decisions/batch`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ decisions: decisions.map((d) => ({ itemId: d.itemId, targetId: d.targetId, status: d.status, note: d.note })) }),
   });
@@ -218,7 +224,7 @@ function openDetail(id) {
 
 async function triggerScrape() {
   try {
-    const res = await fetch('/api/scrape', { method: 'POST' });
+    const res = await fetch(`${API_BASE}api/scrape`, { method: 'POST' });
     const data = await res.json();
     alert(`Scraping complete. ${data.newItemsCount} new items found.`);
     await loadTargets();
@@ -230,7 +236,7 @@ async function triggerScrape() {
 
 async function executeAction(actionName, itemId) {
   try {
-    const res = await fetch(`/api/action/${actionName}`, {
+    const res = await fetch(`${API_BASE}api/action/${actionName}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId }),
     });
     const data = await res.json();

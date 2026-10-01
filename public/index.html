@@ -157,7 +157,13 @@
     <button onclick="undo()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">Undo</button>
   </div>
 
-  <script src="/plugin.js"></script>
-  <script src="/app.js"></script>
+  <!-- Relative, not root-absolute: a host running this behind a stripped path prefix
+       (e.g. Traefik's stripprefix middleware serving this at /some/prefix/) resolves these
+       correctly from the current page path either way, but /app.js would 404 — the request
+       never carries the prefix a proxy needs to route it back here. Found live: the script
+       never loaded at all under a real proxy, so no page JS ever ran (found via a live browser
+       session, not by reading the proxy config and assuming it'd work). -->
+  <script src="plugin.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
